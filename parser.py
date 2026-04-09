@@ -56,17 +56,14 @@ def parse_invoice_text(text: str) -> dict:
 
 def _extract_date(text: str) -> str:
     """Extract invoice date."""
-    # Pattern: 开票日期：2024年01月15日
     m = re.search(r"开票日期\s*[:：]\s*(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", text)
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
 
-    # Pattern: 开票日期 2024-01-15
     m = re.search(r"开票日期\s*[:：]?\s*(\d{4}[-/]\d{1,2}[-/]\d{1,2})", text)
     if m:
         return m.group(1).replace("/", "-")
 
-    # Generic date: 2024年01月15日
     m = re.search(r"(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日", text)
     if m:
         return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d}"
@@ -76,22 +73,22 @@ def _extract_date(text: str) -> str:
 
 def _extract_amount(text: str) -> str:
     """Extract total amount (价税合计)."""
-    # Pattern: 价税合计(小写) ¥1280.00 or ￥1280.00
-    m = re.search(r"价\s*税\s*合\s*计\s*[\(（]?\s*小\s*写\s*[\)）]?\s*[¥￥]?\s*([\d,]+\.?\d*)", text)
+    # (小写)¥100000.00 or （小写）¥100000.00
+    m = re.search(r"[\(（]\s*小\s*写\s*[\)）]\s*[¥￥]\s*([\d,]+\.?\d*)", text)
     if m:
         return m.group(1).replace(",", "")
 
-    # Pattern: 小写 ¥1280.00
+    # 价税合计 ... ¥1280.00
+    m = re.search(r"价\s*税\s*合\s*计[\s\S]{0,30}?[¥￥]\s*([\d,]+\.?\d*)", text)
+    if m:
+        return m.group(1).replace(",", "")
+
+    # 小写 ¥1280.00
     m = re.search(r"小\s*写\s*[¥￥]\s*([\d,]+\.?\d*)", text)
     if m:
         return m.group(1).replace(",", "")
 
-    # Pattern: ¥1280.00 near 价税合计
-    m = re.search(r"价\s*税\s*合\s*计[\s\S]{0,20}?[¥￥]\s*([\d,]+\.?\d*)", text)
-    if m:
-        return m.group(1).replace(",", "")
-
-    # Pattern: 合计金额 or 合 计
+    # Any ¥ amount
     m = re.search(r"[¥￥]\s*([\d,]+\.\d{2})", text)
     if m:
         return m.group(1).replace(",", "")
@@ -100,30 +97,48 @@ def _extract_amount(text: str) -> str:
 
 
 def _extract_seller(text: str) -> str:
-    """Extract seller name (销售方名称)."""
-    # Pattern: 销售方 followed by 名称: XXX公司
-    # Handle spaced characters like 销 售 方, 名 称
-    m = re.search(r"销\s*售\s*方[\s\S]{0,30}?名\s*称\s*[:：]\s*(.+)", text)
+    """Extract seller name (销售方名称).
+
+    pdfplumber often merges columns into one line, producing patterns like:
+      "购 名称：买方公司 销 名称：卖方公司"
+    or on separate lines:
+      "销售方 ... 名称：卖方公司"
+    """
+    # Pattern 1: "销 名称：XXX" (pdfplumber merged columns)
+    # Matches: 销 名称：唐河县计出有据营销策划工作室（个体工商户）
+    m = re.search(r"销\s+名\s*称\s*[:：]\s*(.+?)(?:\s{2,}|$)", text, re.MULTILINE)
     if m:
-        name = m.group(1).strip()
-        # Clean up: take until next field label or newline
-        name = re.split(r"\s{2,}|纳税人识别号|统一社会信用代码|地\s*址|开户", name)[0].strip()
+        name = _clean_seller_name(m.group(1))
         if name:
             return name
 
-    # Pattern: 销售方名称 on same line
-    m = re.search(r"名\s*称\s*[:：]\s*(.+?)(?:\s{2,}|$)", text, re.MULTILINE)
+    # Pattern 2: "销售方" followed by "名称：XXX" within ~50 chars
+    m = re.search(r"销\s*售\s*方[\s\S]{0,50}?名\s*称\s*[:：]\s*(.+)", text)
     if m:
-        # This might match buyer too, so look for it after "销售方" section
-        # Find all 名称 matches and take the second one (first is buyer, second is seller)
-        matches = re.findall(r"名\s*称\s*[:：]\s*(.+?)(?:\s{2,}|$)", text, re.MULTILINE)
-        if len(matches) >= 2:
-            name = matches[1].strip()
-            name = re.split(r"纳税人|统一社会|地\s*址|开户", name)[0].strip()
-            if name:
-                return name
+        name = _clean_seller_name(m.group(1))
+        if name:
+            return name
+
+    # Pattern 3: Two "名称：" on the same line — second one is seller
+    # e.g., "购...名称：买方 销...名称：卖方"
+    line_matches = re.findall(r"名\s*称\s*[:：]\s*(.+?)(?:\s+销|\s+名\s*称|$)", text, re.MULTILINE)
+    if not line_matches:
+        line_matches = re.findall(r"名\s*称\s*[:：]\s*(.+?)(?:\s{2,}|$)", text, re.MULTILINE)
+    if len(line_matches) >= 2:
+        name = _clean_seller_name(line_matches[1])
+        if name:
+            return name
 
     return "未知"
+
+
+def _clean_seller_name(raw: str) -> str:
+    """Clean up extracted seller name by removing trailing fields."""
+    name = raw.strip()
+    name = re.split(r"\s{2,}|纳税人识别号|纳\s*税\s*人|统一社会信用代码|地\s*址|开户|电\s*话", name)[0].strip()
+    # Remove leading/trailing junk characters
+    name = re.sub(r"^[\s:：]+|[\s:：]+$", "", name)
+    return name
 
 
 def parse_invoice(file_bytes: bytes, content_type: str) -> dict:

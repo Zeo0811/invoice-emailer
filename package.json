@@ -1,0 +1,16 @@
+{
+  "name": "invoice-emailer",
+  "version": "1.0.0",
+  "description": "Upload invoices, parse with AI, and send via email",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "resend": "^4.0.0"
+  }
+}

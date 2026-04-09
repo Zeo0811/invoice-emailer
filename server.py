@@ -1,7 +1,9 @@
 import os
 import hashlib
+from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 import resend
 
 from parser import parse_invoice
@@ -11,6 +13,8 @@ app = FastAPI(
     version="1.0.0",
     description="Upload invoices, parse with OCR, send via email",
 )
+
+app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 resend.api_key = os.environ.get("RESEND_API_KEY", "")
 RECIPIENT_EMAIL = os.environ.get("RECIPIENT_EMAIL", "zeo0811@gmail.com")
@@ -31,6 +35,7 @@ UPLOAD_PAGE = """<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Invoice Emailer — 十字路口 Crossing</title>
+<link rel="icon" href="/static/favicon.ico" type="image/x-icon">
 <style>
   :root {
     --green: #407600;
@@ -58,7 +63,7 @@ UPLOAD_PAGE = """<!DOCTYPE html>
     padding: 0 24px; display: flex; align-items: center; gap: 12px;
     color: #fff;
   }
-  .header svg { width: 28px; height: 28px; flex-shrink: 0; }
+  .header img.logo { width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; }
   .header h1 { font-size: 16px; font-weight: 700; }
   .header .tag {
     padding: 2px 10px; border-radius: 12px; font-size: 11px; font-weight: 500;
@@ -183,7 +188,7 @@ UPLOAD_PAGE = """<!DOCTYPE html>
 <body>
 
 <div class="header">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+  <img class="logo" src="/static/logo.png" alt="十字路口">
   <h1>Invoice Emailer</h1>
   <span class="tag">Crossing Tools</span>
 </div>

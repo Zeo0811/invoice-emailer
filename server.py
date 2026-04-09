@@ -189,7 +189,7 @@ UPLOAD_PAGE = """<!DOCTYPE html>
 
 <div class="header">
   <img class="logo" src="/static/logo.png" alt="十字路口">
-  <h1>Invoice Emailer</h1>
+  <h1>发票存档</h1>
   <span class="tag">Crossing Tools</span>
 </div>
 
